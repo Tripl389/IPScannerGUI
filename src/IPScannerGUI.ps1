@@ -2,6 +2,18 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
+# ===============================
+# Versions- & Update-Konfiguration
+# ===============================
+$appVersion = [version]"1.0.0"     # hier später hochzählen: 1.0.1, 1.1.0, ...
+
+$repoOwner   = "Tripl389"
+$repoName    = "IPScannerGUI"
+$versionFile = "version.txt"
+
+$versionUrl  = "https://raw.githubusercontent.com/$repoOwner/$repoName/main/$versionFile"
+$releaseUrl  = "https://github.com/$repoOwner/$repoName/releases/latest"
+
 function Increment-IP {
     param ([string]$ip)
     $bytes = $ip -split '\.' | ForEach-Object {[int]$_}
@@ -49,6 +61,43 @@ function Get-VendorFromMac {
         return $vendors[$oui]
     } else {
         return "Unbekannt"
+    }
+}
+
+function Check-ForUpdate {
+    param(
+        [version]$localVersion,
+        [string]$remoteVersionUrl,
+        [string]$releasePageUrl
+    )
+
+    try {
+        $response = Invoke-WebRequest -Uri $remoteVersionUrl -UseBasicParsing -TimeoutSec 5
+        $remoteString = $response.Content.Trim()
+        if ([string]::IsNullOrWhiteSpace($remoteString)) { return }
+
+        $remoteVersion = [version]$remoteString
+
+        if ($remoteVersion -gt $localVersion) {
+            $msg = "Es ist eine neue Version verfügbar." + "`r`n`r`n" +
+                   "Installiert:  $localVersion`r`n" +
+                   "Verfügbar:   $remoteVersion`r`n`r`n" +
+                   "Möchtest du die GitHub-Seite mit der neuen Version öffnen?"
+
+            $result = [System.Windows.Forms.MessageBox]::Show(
+                $msg,
+                "Update verfügbar",
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+
+            if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+                [System.Diagnostics.Process]::Start($releasePageUrl) | Out-Null
+            }
+        }
+    } catch {
+        # Kein Internet / GitHub nicht erreichbar -> still ignorieren
+        return
     }
 }
 
@@ -225,7 +274,7 @@ $buttonInfo.Add_Click({
     $aboutForm.Controls.Add($lblDev)
 
     $lblVer = New-Object System.Windows.Forms.Label
-    $lblVer.Text = "Version 1.0"
+    $lblVer.Text = "Version $($appVersion.ToString())"
     $lblVer.Location = New-Object System.Drawing.Point(20, 75)
     $lblVer.AutoSize = $true
     $aboutForm.Controls.Add($lblVer)
@@ -522,5 +571,8 @@ $buttonStart.Add_Click({
         $script:cancelScan   = $false
     }
 })
+
+# --- beim Start einmal nach Updates schauen ---
+Check-ForUpdate -localVersion $appVersion -remoteVersionUrl $versionUrl -releasePageUrl $releaseUrl
 
 [void][System.Windows.Forms.Application]::Run($form)
